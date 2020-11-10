@@ -6,7 +6,6 @@
 [![License](https://poser.pugx.org/alexusmai/laravel-file-manager/license)](https://packagist.org/packages/alexusmai/laravel-file-manager)
 
 
-![Laravel File Manager](https://raw.github.com/alexusmai/vue-laravel-file-manager/master/src/assets/laravel-file-manager.gif?raw=true)
 
 **DEMO:** [Laravel File Manager](http://file-manager.webmai.ru/)
 

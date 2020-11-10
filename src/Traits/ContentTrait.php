@@ -28,6 +28,22 @@ trait ContentTrait
         $files = $this->filterFile($disk, $content);
 
         return compact('directories', 'files');
+	}
+
+    /**
+     * Get content for the selected dir
+     *
+     * @param       $disk
+     * @param  null $path
+     *
+     * @return array
+     */
+    public function getContentInDirectory($disk, $path = null)
+    {
+        $content = Storage::disk($disk)->listContents($path);
+
+        // get a list of files
+        return $this->filterFile($disk, $content);
     }
 
     /**
@@ -76,7 +92,8 @@ trait ContentTrait
             $directories[$index]['props'] = [
                 'hasSubdirectories' => Storage::disk($disk)
                     ->directories($dir['path']) ? true : false,
-            ];
+			];
+			$directories[$index]['files'] = $this->getContentInDirectory($disk, $dir['path']);
         }
 
         return $directories;
