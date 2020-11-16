@@ -144,6 +144,9 @@ class FileManager
 	{
 		$fileNotUploaded = false;
 
+		// FIXME: работает только для одного файла
+		$filePath = null;
+
 		foreach ($files as $file) {
 			// skip or overwrite files
 			if (
@@ -151,6 +154,7 @@ class FileManager
 				&& Storage::disk($disk)
 				->exists($path . '/' . $file->getClientOriginalName())
 			) {
+
 				continue;
 			}
 
@@ -199,7 +203,7 @@ class FileManager
 				'status'  => 'success',
 				'message' => 'uploaded',
 				// TODO:Changed
-				'data' => $this->fileProperties($disk, $filePath)
+				'data' => $filePath ? $this->fileProperties($disk, $filePath) : null,
 			],
 		];
 	}
