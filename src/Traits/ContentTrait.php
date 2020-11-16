@@ -199,10 +199,22 @@ trait ContentTrait
      */
     protected function filterFile($disk, $content)
     {
+		// select only files and add trunced mime type
+		$files = [];
+		foreach($content as $item) {
+			if($item['type'] === 'file') {
+				$item['mime'] = stristr(Storage::disk($disk)->mimeType($item['path']), '/', true);
+				$files[] = $item;
+			}
+		}
+
         // select only files
-        $files = Arr::where($content, function ($item) {
-            return $item['type'] === 'file';
-        });
+        // $files = Arr::where($content, function ($item) use ($disk) {
+        //     if($item['type'] === 'file') {
+		// 		$item['properties'] = $this->fileProperties($disk, $item['path']);
+		// 		return $item;
+		// 	}
+        // });
 
         // if ACL ON
         if ($this->configRepository->getAcl()) {
