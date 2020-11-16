@@ -15,491 +15,503 @@ use Image;
 
 class FileManager
 {
-    use PathTrait, ContentTrait, CheckTrait;
+	use PathTrait, ContentTrait, CheckTrait;
 
-    /**
-     * @var ConfigRepository
-     */
-    public $configRepository;
+	/**
+	 * @var ConfigRepository
+	 */
+	public $configRepository;
 
-    /**
-     * FileManager constructor.
-     *
-     * @param  ConfigRepository  $configRepository
-     */
-    public function __construct(ConfigRepository $configRepository)
-    {
-        $this->configRepository = $configRepository;
-    }
+	/**
+	 * FileManager constructor.
+	 *
+	 * @param  ConfigRepository  $configRepository
+	 */
+	public function __construct(ConfigRepository $configRepository)
+	{
+		$this->configRepository = $configRepository;
+	}
 
-    /**
-     * Initialize App
-     *
-     * @return array
-     */
-    public function initialize()
-    {
-        // if config not found
-        if (!config()->has('file-manager')) {
-            return [
-                'result' => [
-                    'status'  => 'danger',
-                    'message' => 'noConfig'
-                ],
-            ];
-        }
+	/**
+	 * Initialize App
+	 *
+	 * @return array
+	 */
+	public function initialize()
+	{
+		// if config not found
+		if (!config()->has('file-manager')) {
+			return [
+				'result' => [
+					'status'  => 'danger',
+					'message' => 'noConfig'
+				],
+			];
+		}
 
-        $config = [
-            'acl'           => $this->configRepository->getAcl(),
-            'leftDisk'      => $this->configRepository->getLeftDisk(),
-            'rightDisk'     => $this->configRepository->getRightDisk(),
-            'leftPath'      => $this->configRepository->getLeftPath(),
-            'rightPath'     => $this->configRepository->getRightPath(),
-            'windowsConfig' => $this->configRepository->getWindowsConfig(),
-            'hiddenFiles'   => $this->configRepository->getHiddenFiles(),
-        ];
+		$config = [
+			'acl'           => $this->configRepository->getAcl(),
+			'leftDisk'      => $this->configRepository->getLeftDisk(),
+			'rightDisk'     => $this->configRepository->getRightDisk(),
+			'leftPath'      => $this->configRepository->getLeftPath(),
+			'rightPath'     => $this->configRepository->getRightPath(),
+			'windowsConfig' => $this->configRepository->getWindowsConfig(),
+			'hiddenFiles'   => $this->configRepository->getHiddenFiles(),
+		];
 
-        // disk list
-        foreach ($this->configRepository->getDiskList() as $disk) {
-            if (array_key_exists($disk, config('filesystems.disks'))) {
-                $config['disks'][$disk] = Arr::only(
-                    config('filesystems.disks')[$disk], ['driver']
-                );
-            }
-        }
+		// disk list
+		foreach ($this->configRepository->getDiskList() as $disk) {
+			if (array_key_exists($disk, config('filesystems.disks'))) {
+				$config['disks'][$disk] = Arr::only(
+					config('filesystems.disks')[$disk],
+					['driver']
+				);
+			}
+		}
 
-        // get language
-        $config['lang'] = app()->getLocale();
+		// get language
+		$config['lang'] = app()->getLocale();
 
-        return [
-            'result' => [
-                'status'  => 'success',
-                'message' => null,
-            ],
-            'config' => $config,
-        ];
-    }
+		return [
+			'result' => [
+				'status'  => 'success',
+				'message' => null,
+			],
+			'config' => $config,
+		];
+	}
 
-    /**
-     * Get files and directories for the selected path and disk
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return array
-     */
-    public function content($disk, $path)
-    {
-        // get content for the selected directory
-        $content = $this->getContent($disk, $path);
+	/**
+	 * Get files and directories for the selected path and disk
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return array
+	 */
+	public function content($disk, $path)
+	{
+		// get content for the selected directory
+		$content = $this->getContent($disk, $path);
 
-        return [
-            'result'      => [
-                'status'  => 'success',
-                'message' => null,
-            ],
-            'directories' => $content['directories'],
-            'files'       => $content['files'],
-        ];
-    }
+		return [
+			'result'      => [
+				'status'  => 'success',
+				'message' => null,
+			],
+			'directories' => $content['directories'],
+			'files'       => $content['files'],
+		];
+	}
 
-    /**
-     * Get part of the directory tree
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return array
-     */
-    public function tree($disk, $path)
-    {
-        $directories = $this->getDirectoriesTree($disk, $path);
+	/**
+	 * Get part of the directory tree
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return array
+	 */
+	public function tree($disk, $path)
+	{
+		$directories = $this->getDirectoriesTree($disk, $path);
+		$current_access = $this->aclFilter($disk, [
+			['path' => $path]
+		]);
 
-        return [
-            'result'      => [
-                'status'  => 'success',
-                'message' => null,
-            ],
-            'directories' => $directories,
-        ];
-    }
 
-    /**
-     * Upload files
-     *
-     * @param $disk
-     * @param $path
-     * @param $files
-     * @param $overwrite
-     *
-     * @return array
-     */
-    public function upload($disk, $path, $files, $overwrite)
-    {
-        $fileNotUploaded = false;
+		return [
+			'result'      => [
+				'status'  => 'success',
+				'message' => null,
+				'current_folder_access' => $current_access ? $current_access[0]['acl'] : null,
+			],
+			'directories' => $directories,
+		];
+	}
 
-        foreach ($files as $file) {
-            // skip or overwrite files
-            if (!$overwrite
-                && Storage::disk($disk)
-                    ->exists($path.'/'.$file->getClientOriginalName())
-            ) {
-                continue;
-            }
+	/**
+	 * Upload files
+	 *
+	 * @param $disk
+	 * @param $path
+	 * @param $files
+	 * @param $overwrite
+	 *
+	 * @return array
+	 */
+	public function upload($disk, $path, $files, $overwrite)
+	{
+		$fileNotUploaded = false;
 
-            // check file size if need
-            if ($this->configRepository->getMaxUploadFileSize()
-                && $file->getSize() / 1024 > $this->configRepository->getMaxUploadFileSize()
-            ) {
-                $fileNotUploaded = true;
-                continue;
-            }
+		foreach ($files as $file) {
+			// skip or overwrite files
+			if (
+				!$overwrite
+				&& Storage::disk($disk)
+				->exists($path . '/' . $file->getClientOriginalName())
+			) {
+				continue;
+			}
 
-            // check file type if need
-            if ($this->configRepository->getAllowFileTypes()
-                && !in_array(
-                    $file->getClientOriginalExtension(),
-                    $this->configRepository->getAllowFileTypes()
-                )
-            ) {
-                $fileNotUploaded = true;
-                continue;
-            }
+			// check file size if need
+			if (
+				$this->configRepository->getMaxUploadFileSize()
+				&& $file->getSize() / 1024 > $this->configRepository->getMaxUploadFileSize()
+			) {
+				$fileNotUploaded = true;
+				continue;
+			}
 
-            // overwrite or save file
-            Storage::disk($disk)->putFileAs(
-                $path,
-                $file,
-                $file->getClientOriginalName()
-            );
-        }
+			// check file type if need
+			if (
+				$this->configRepository->getAllowFileTypes()
+				&& !in_array(
+					$file->getClientOriginalExtension(),
+					$this->configRepository->getAllowFileTypes()
+				)
+			) {
+				$fileNotUploaded = true;
+				continue;
+			}
 
-        // If the some file was not uploaded
-        if ($fileNotUploaded) {
-            return [
-                'result' => [
-                    'status'  => 'warning',
-                    'message' => 'notAllUploaded',
-                ],
-            ];
-        }
+			// overwrite or save file
+			// TODO::Changed
+			$filePath = Storage::disk($disk)->putFileAs(
+				$path,
+				$file,
+				$file->getClientOriginalName()
+			);
+		}
 
-        return [
-            'result' => [
-                'status'  => 'success',
-                'message' => 'uploaded',
-            ],
-        ];
-    }
+		// If the some file was not uploaded
+		if ($fileNotUploaded) {
+			return [
+				'result' => [
+					'status'  => 'warning',
+					'message' => 'notAllUploaded',
+				],
+			];
+		}
 
-    /**
-     * Delete files and folders
-     *
-     * @param $disk
-     * @param $items
-     *
-     * @return array
-     */
-    public function delete($disk, $items)
-    {
-        $deletedItems = [];
+		return [
+			'result' => [
+				'status'  => 'success',
+				'message' => 'uploaded',
+				// TODO:Changed
+				'data' => $this->fileProperties($disk, $filePath)
+			],
+		];
+	}
 
-        foreach ($items as $item) {
-            // check all files and folders - exists or no
-            if (!Storage::disk($disk)->exists($item['path'])) {
-                continue;
-            } else {
-                if ($item['type'] === 'dir') {
-                    // delete directory
-                    Storage::disk($disk)->deleteDirectory($item['path']);
-                } else {
-                    // delete file
-                    Storage::disk($disk)->delete($item['path']);
-                }
-            }
+	/**
+	 * Delete files and folders
+	 *
+	 * @param $disk
+	 * @param $items
+	 *
+	 * @return array
+	 */
+	public function delete($disk, $items)
+	{
+		$deletedItems = [];
 
-            // add deleted item
-            $deletedItems[] = $item;
-        }
+		foreach ($items as $item) {
+			// check all files and folders - exists or no
+			if (!Storage::disk($disk)->exists($item['path'])) {
+				continue;
+			} else {
+				if ($item['type'] === 'dir') {
+					// delete directory
+					Storage::disk($disk)->deleteDirectory($item['path']);
+				} else {
+					// delete file
+					Storage::disk($disk)->delete($item['path']);
+				}
+			}
 
-        event(new Deleted($disk, $deletedItems));
+			// add deleted item
+			$deletedItems[] = $item;
+		}
 
-        return [
-            'result' => [
-                'status'  => 'success',
-                'message' => 'deleted',
-            ],
-        ];
-    }
+		event(new Deleted($disk, $deletedItems));
 
-    /**
-     * Copy / Cut - Files and Directories
-     *
-     * @param $disk
-     * @param $path
-     * @param $clipboard
-     *
-     * @return array
-     */
-    public function paste($disk, $path, $clipboard)
-    {
-        // compare disk names
-        if ($disk !== $clipboard['disk']) {
+		return [
+			'result' => [
+				'status'  => 'success',
+				'message' => 'deleted',
+			],
+		];
+	}
 
-            if (!$this->checkDisk($clipboard['disk'])) {
-                return $this->notFoundMessage();
-            }
-        }
+	/**
+	 * Copy / Cut - Files and Directories
+	 *
+	 * @param $disk
+	 * @param $path
+	 * @param $clipboard
+	 *
+	 * @return array
+	 */
+	public function paste($disk, $path, $clipboard)
+	{
+		// compare disk names
+		if ($disk !== $clipboard['disk']) {
 
-        $transferService = TransferFactory::build($disk, $path, $clipboard);
+			if (!$this->checkDisk($clipboard['disk'])) {
+				return $this->notFoundMessage();
+			}
+		}
 
-        return $transferService->filesTransfer();
-    }
+		$transferService = TransferFactory::build($disk, $path, $clipboard);
 
-    /**
-     * Rename file or folder
-     *
-     * @param $disk
-     * @param $newName
-     * @param $oldName
-     *
-     * @return array
-     */
-    public function rename($disk, $newName, $oldName)
-    {
-        Storage::disk($disk)->move($oldName, $newName);
+		return $transferService->filesTransfer();
+	}
 
-        return [
-            'result' => [
-                'status'  => 'success',
-                'message' => 'renamed',
-            ],
-        ];
-    }
+	/**
+	 * Rename file or folder
+	 *
+	 * @param $disk
+	 * @param $newName
+	 * @param $oldName
+	 *
+	 * @return array
+	 */
+	public function rename($disk, $newName, $oldName)
+	{
+		Storage::disk($disk)->move($oldName, $newName);
 
-    /**
-     * Download selected file
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return mixed
-     */
-    public function download($disk, $path)
-    {
-        // if file name not in ASCII format
-        if (!preg_match('/^[\x20-\x7e]*$/', basename($path))) {
-            $filename = Str::ascii(basename($path));
-        } else {
-            $filename = basename($path);
-        }
+		return [
+			'result' => [
+				'status'  => 'success',
+				'message' => 'renamed',
+			],
+		];
+	}
 
-        return Storage::disk($disk)->download($path, $filename);
-    }
+	/**
+	 * Download selected file
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return mixed
+	 */
+	public function download($disk, $path)
+	{
+		// if file name not in ASCII format
+		if (!preg_match('/^[\x20-\x7e]*$/', basename($path))) {
+			$filename = Str::ascii(basename($path));
+		} else {
+			$filename = basename($path);
+		}
 
-    /**
-     * Create thumbnails
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return \Illuminate\Http\Response|mixed
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
-     */
-    public function thumbnails($disk, $path)
-    {
-        // create thumbnail
-        if ($this->configRepository->getCache()) {
-            $thumbnail = Image::cache(function ($image) use ($disk, $path) {
-                $image->make(Storage::disk($disk)->get($path))->fit(80);
-            }, $this->configRepository->getCache());
+		return Storage::disk($disk)->download($path, $filename);
+	}
 
-            // output
-            return response()->make(
-                $thumbnail,
-                200,
-                ['Content-Type' => Storage::disk($disk)->mimeType($path)]
-            );
-        }
+	/**
+	 * Create thumbnails
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return \Illuminate\Http\Response|mixed
+	 * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+	 */
+	public function thumbnails($disk, $path)
+	{
+		// create thumbnail
+		if ($this->configRepository->getCache()) {
+			$thumbnail = Image::cache(function ($image) use ($disk, $path) {
+				$image->make(Storage::disk($disk)->get($path))->fit(80);
+			}, $this->configRepository->getCache());
 
-        $thumbnail = Image::make(Storage::disk($disk)->get($path))->fit(80);
+			// output
+			return response()->make(
+				$thumbnail,
+				200,
+				['Content-Type' => Storage::disk($disk)->mimeType($path)]
+			);
+		}
 
-        return $thumbnail->response();
-    }
+		$thumbnail = Image::make(Storage::disk($disk)->get($path))->fit(80);
 
-    /**
-     * Image preview
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return mixed
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
-     */
-    public function preview($disk, $path)
-    {
-        // get image
-        $preview = Image::make(Storage::disk($disk)->get($path));
+		return $thumbnail->response();
+	}
 
-        return $preview->response();
-    }
+	/**
+	 * Image preview
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return mixed
+	 * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+	 */
+	public function preview($disk, $path)
+	{
+		// get image
+		$preview = Image::make(Storage::disk($disk)->get($path));
 
-    /**
-     * Get file URL
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return array
-     */
-    public function url($disk, $path)
-    {
-        return [
-            'result' => [
-                'status'  => 'success',
-                'message' => null,
-            ],
-            'url'    => Storage::disk($disk)->url($path),
-        ];
-    }
+		return $preview->response();
+	}
 
-    /**
-     * Create new directory
-     *
-     * @param $disk
-     * @param $path
-     * @param $name
-     *
-     * @return array
-     */
-    public function createDirectory($disk, $path, $name)
-    {
-        // path for new directory
-        $directoryName = $this->newPath($path, $name);
+	/**
+	 * Get file URL
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return array
+	 */
+	public function url($disk, $path)
+	{
+		return [
+			'result' => [
+				'status'  => 'success',
+				'message' => null,
+			],
+			'url'    => Storage::disk($disk)->url($path),
+		];
+	}
 
-        // check - exist directory or no
-        if (Storage::disk($disk)->exists($directoryName)) {
-            return [
-                'result' => [
-                    'status'  => 'warning',
-                    'message' => 'dirExist',
-                ],
-            ];
-        }
+	/**
+	 * Create new directory
+	 *
+	 * @param $disk
+	 * @param $path
+	 * @param $name
+	 *
+	 * @return array
+	 */
+	public function createDirectory($disk, $path, $name)
+	{
+		// path for new directory
+		$directoryName = $this->newPath($path, $name);
 
-        // create new directory
-        Storage::disk($disk)->makeDirectory($directoryName);
+		// check - exist directory or no
+		if (Storage::disk($disk)->exists($directoryName)) {
+			return [
+				'result' => [
+					'status'  => 'warning',
+					'message' => 'dirExist',
+				],
+			];
+		}
 
-        // get directory properties
-        $directoryProperties = $this->directoryProperties(
-            $disk,
-            $directoryName
-        );
+		// create new directory
+		Storage::disk($disk)->makeDirectory($directoryName);
 
-        // add directory properties for the tree module
-        $tree = $directoryProperties;
-        $tree['props'] = ['hasSubdirectories' => false];
+		// get directory properties
+		$directoryProperties = $this->directoryProperties(
+			$disk,
+			$directoryName
+		);
 
-        return [
-            'result'    => [
-                'status'  => 'success',
-                'message' => 'dirCreated',
-            ],
-            'directory' => $directoryProperties,
-            'tree'      => [$tree],
-        ];
-    }
+		// add directory properties for the tree module
+		$tree = $directoryProperties;
+		$tree['props'] = ['hasSubdirectories' => false];
 
-    /**
-     * Create new file
-     *
-     * @param $disk
-     * @param $path
-     * @param $name
-     *
-     * @return array
-     */
-    public function createFile($disk, $path, $name)
-    {
-        // path for new file
-        $path = $this->newPath($path, $name);
+		return [
+			'result'    => [
+				'status'  => 'success',
+				'message' => 'dirCreated',
+			],
+			'directory' => $directoryProperties,
+			'tree'      => [$tree],
+		];
+	}
 
-        // check - exist file or no
-        if (Storage::disk($disk)->exists($path)) {
-            return [
-                'result' => [
-                    'status'  => 'warning',
-                    'message' => 'fileExist',
-                ],
-            ];
-        }
+	/**
+	 * Create new file
+	 *
+	 * @param $disk
+	 * @param $path
+	 * @param $name
+	 *
+	 * @return array
+	 */
+	public function createFile($disk, $path, $name)
+	{
+		// path for new file
+		$path = $this->newPath($path, $name);
 
-        // create new file
-        Storage::disk($disk)->put($path, '');
+		// check - exist file or no
+		if (Storage::disk($disk)->exists($path)) {
+			return [
+				'result' => [
+					'status'  => 'warning',
+					'message' => 'fileExist',
+				],
+			];
+		}
 
-        // get file properties
-        $fileProperties = $this->fileProperties($disk, $path);
+		// create new file
+		Storage::disk($disk)->put($path, '');
 
-        return [
-            'result' => [
-                'status'  => 'success',
-                'message' => 'fileCreated',
-            ],
-            'file'   => $fileProperties,
-        ];
-    }
+		// get file properties
+		$fileProperties = $this->fileProperties($disk, $path);
 
-    /**
-     * Update file
-     *
-     * @param $disk
-     * @param $path
-     * @param $file
-     *
-     * @return array
-     */
-    public function updateFile($disk, $path, $file)
-    {
-        // update file
-        Storage::disk($disk)->putFileAs(
-            $path,
-            $file,
-            $file->getClientOriginalName()
-        );
+		return [
+			'result' => [
+				'status'  => 'success',
+				'message' => 'fileCreated',
+			],
+			'file'   => $fileProperties,
+		];
+	}
 
-        // path for new file
-        $filePath = $this->newPath($path, $file->getClientOriginalName());
+	/**
+	 * Update file
+	 *
+	 * @param $disk
+	 * @param $path
+	 * @param $file
+	 *
+	 * @return array
+	 */
+	public function updateFile($disk, $path, $file)
+	{
+		// update file
+		Storage::disk($disk)->putFileAs(
+			$path,
+			$file,
+			$file->getClientOriginalName()
+		);
 
-        // get file properties
-        $fileProperties = $this->fileProperties($disk, $filePath);
+		// path for new file
+		$filePath = $this->newPath($path, $file->getClientOriginalName());
 
-        return [
-            'result' => [
-                'status'  => 'success',
-                'message' => 'fileUpdated',
-            ],
-            'file'   => $fileProperties,
-        ];
-    }
+		// get file properties
+		$fileProperties = $this->fileProperties($disk, $filePath);
 
-    /**
-     * Stream file - for audio and video
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return mixed
-     */
-    public function streamFile($disk, $path)
-    {
-        // if file name not in ASCII format
-        if (!preg_match('/^[\x20-\x7e]*$/', basename($path))) {
-            $filename = Str::ascii(basename($path));
-        } else {
-            $filename = basename($path);
-        }
+		return [
+			'result' => [
+				'status'  => 'success',
+				'message' => 'fileUpdated',
+			],
+			'file'   => $fileProperties,
+		];
+	}
 
-        return Storage::disk($disk)
-            ->response($path, $filename, ['Accept-Ranges' => 'bytes']);
-    }
+	/**
+	 * Stream file - for audio and video
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return mixed
+	 */
+	public function streamFile($disk, $path)
+	{
+		// if file name not in ASCII format
+		if (!preg_match('/^[\x20-\x7e]*$/', basename($path))) {
+			$filename = Str::ascii(basename($path));
+		} else {
+			$filename = basename($path);
+		}
+
+		return Storage::disk($disk)
+			->response($path, $filename, ['Accept-Ranges' => 'bytes']);
+	}
 }
