@@ -412,6 +412,10 @@ class FileManager
 			$directoryName
 		);
 
+		// TODO::Changed
+		// Добавляет пустой массив файлов, для корректной работы фронтенда по аналогии построения Tree
+		$directoryProperties['files'] = [];
+
 		// add directory properties for the tree module
 		$tree = $directoryProperties;
 		$tree['props'] = ['hasSubdirectories' => false];
