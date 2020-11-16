@@ -9,247 +9,261 @@ use Storage;
 trait ContentTrait
 {
 
-    /**
-     * Get content for the selected disk and path
-     *
-     * @param       $disk
-     * @param  null $path
-     *
-     * @return array
-     */
-    public function getContent($disk, $path = null)
-    {
-        $content = Storage::disk($disk)->listContents($path);
+	/**
+	 * Get content for the selected disk and path
+	 *
+	 * @param       $disk
+	 * @param  null $path
+	 *
+	 * @return array
+	 */
+	public function getContent($disk, $path = null)
+	{
+		$content = Storage::disk($disk)->listContents($path);
 
-        // get a list of directories
-        $directories = $this->filterDir($disk, $content);
+		// get a list of directories
+		$directories = $this->filterDir($disk, $content);
 
-        // get a list of files
-        $files = $this->filterFile($disk, $content);
+		// get a list of files
+		$files = $this->filterFile($disk, $content);
 
-        return compact('directories', 'files');
+		return compact('directories', 'files');
 	}
 
-    /**
-     * Get content for the selected dir
-     *
-     * @param       $disk
-     * @param  null $path
-     *
-     * @return array
-     */
-    public function getContentInDirectory($disk, $path = null)
-    {
-        $content = Storage::disk($disk)->listContents($path);
+	/**
+	 * Get content for the selected dir
+	 *
+	 * @param       $disk
+	 * @param  null $path
+	 *
+	 * @return array
+	 */
+	public function getContentInDirectory($disk, $path = null)
+	{
+		$content = Storage::disk($disk)->listContents($path);
 
-        // get a list of files
-        return $this->filterFile($disk, $content);
-    }
+		// get a list of files
+		return $this->filterFile($disk, $content);
+	}
 
-    /**
-     * Get directories with properties
-     *
-     * @param       $disk
-     * @param  null $path
-     *
-     * @return array
-     */
-    public function directoriesWithProperties($disk, $path = null)
-    {
-        $content = Storage::disk($disk)->listContents($path);
+	/**
+	 * Get directories with properties
+	 *
+	 * @param       $disk
+	 * @param  null $path
+	 *
+	 * @return array
+	 */
+	public function directoriesWithProperties($disk, $path = null)
+	{
+		$content = Storage::disk($disk)->listContents($path);
 
-        return $this->filterDir($disk, $content);
-    }
+		return $this->filterDir($disk, $content);
+	}
 
-    /**
-     * Get files with properties
-     *
-     * @param       $disk
-     * @param  null $path
-     *
-     * @return array
-     */
-    public function filesWithProperties($disk, $path = null)
-    {
-        $content = Storage::disk($disk)->listContents($path);
+	/**
+	 * Get files with properties
+	 *
+	 * @param       $disk
+	 * @param  null $path
+	 *
+	 * @return array
+	 */
+	public function filesWithProperties($disk, $path = null)
+	{
+		$content = Storage::disk($disk)->listContents($path);
 
-        return $this->filterFile($disk, $content);
-    }
+		return $this->filterFile($disk, $content);
+	}
 
-    /**
-     * Get directories for tree module
-     *
-     * @param $disk
-     * @param $path
-     *
-     * @return array
-     */
-    public function getDirectoriesTree($disk, $path = null)
-    {
-        $directories = $this->directoriesWithProperties($disk, $path);
+	/**
+	 * Get directories for tree module
+	 *
+	 * @param $disk
+	 * @param $path
+	 *
+	 * @return array
+	 */
+	public function getDirectoriesTree($disk, $path = null)
+	{
+		$directories = $this->directoriesWithProperties($disk, $path);
 
-        foreach ($directories as $index => $dir) {
-            $directories[$index]['props'] = [
-                'hasSubdirectories' => Storage::disk($disk)
-                    ->directories($dir['path']) ? true : false,
+		foreach ($directories as $index => $dir) {
+			$directories[$index]['props'] = [
+				'hasSubdirectories' => Storage::disk($disk)
+					->directories($dir['path']) ? true : false,
 			];
 			$directories[$index]['files'] = $this->getContentInDirectory($disk, $dir['path']);
-        }
+		}
 
-        return $directories;
-    }
+		return $directories;
+	}
 
-    /**
-     * File properties
-     *
-     * @param       $disk
-     * @param  null $path
-     *
-     * @return mixed
-     */
-    public function fileProperties($disk, $path = null)
-    {
-        $file = Storage::disk($disk)->getMetadata($path);
+	/**
+	 * File properties
+	 *
+	 * @param       $disk
+	 * @param  null $path
+	 *
+	 * @return mixed
+	 */
+	public function fileProperties($disk, $path = null)
+	{
+		$file = Storage::disk($disk)->getMetadata($path);
 
-        $pathInfo = pathinfo($path);
+		$pathInfo = pathinfo($path);
 
-        $file['basename'] = $pathInfo['basename'];
-        $file['dirname'] = $pathInfo['dirname'] === '.' ? ''
-            : $pathInfo['dirname'];
-        $file['extension'] = isset($pathInfo['extension'])
-            ? $pathInfo['extension'] : '';
-        $file['filename'] = $pathInfo['filename'];
+		$file['basename'] = $pathInfo['basename'];
+		$file['dirname'] = $pathInfo['dirname'] === '.' ? ''
+			: $pathInfo['dirname'];
+		$file['extension'] = isset($pathInfo['extension'])
+			? $pathInfo['extension'] : '';
+		$file['filename'] = $pathInfo['filename'];
+		$file['mime'] = $this->getCustomMimeType($disk, $path);
 
-        // if ACL ON
-        if ($this->configRepository->getAcl()) {
-            return $this->aclFilter($disk, [$file])[0];
-        }
+		// if ACL ON
+		if ($this->configRepository->getAcl()) {
+			return $this->aclFilter($disk, [$file])[0];
+		}
 
-        return $file;
-    }
+		return $file;
+	}
 
-    /**
-     * Get properties for the selected directory
-     *
-     * @param       $disk
-     * @param  null $path
-     *
-     * @return array|false
-     */
-    public function directoryProperties($disk, $path = null)
-    {
-        $directory = Storage::disk($disk)->getMetadata($path);
+	/**
+	 * Get properties for the selected directory
+	 *
+	 * @param       $disk
+	 * @param  null $path
+	 *
+	 * @return array|false
+	 */
+	public function directoryProperties($disk, $path = null)
+	{
+		$directory = Storage::disk($disk)->getMetadata($path);
 
-        $pathInfo = pathinfo($path);
+		$pathInfo = pathinfo($path);
 
-        /**
-         * S3 didn't return metadata for directories
-         */
-        if (!$directory) {
-            $directory['path'] = $path;
-            $directory['type'] = 'dir';
-        }
+		/**
+		 * S3 didn't return metadata for directories
+		 */
+		if (!$directory) {
+			$directory['path'] = $path;
+			$directory['type'] = 'dir';
+		}
 
-        $directory['basename'] = $pathInfo['basename'];
-        $directory['dirname'] = $pathInfo['dirname'] === '.' ? ''
-            : $pathInfo['dirname'];
+		$directory['basename'] = $pathInfo['basename'];
+		$directory['dirname'] = $pathInfo['dirname'] === '.' ? ''
+			: $pathInfo['dirname'];
 
-        // if ACL ON
-        if ($this->configRepository->getAcl()) {
-            return $this->aclFilter($disk, [$directory])[0];
-        }
+		// if ACL ON
+		if ($this->configRepository->getAcl()) {
+			return $this->aclFilter($disk, [$directory])[0];
+		}
 
-        return $directory;
-    }
+		return $directory;
+	}
 
-    /**
-     * Get only directories
-     *
-     * @param $content
-     *
-     * @return array
-     */
-    protected function filterDir($disk, $content)
-    {
-        // select only dir
-        $dirsList = Arr::where($content, function ($item) {
-            return $item['type'] === 'dir';
-        });
+	/**
+	 * Get only directories
+	 *
+	 * @param $content
+	 *
+	 * @return array
+	 */
+	protected function filterDir($disk, $content)
+	{
+		// select only dir
+		$dirsList = Arr::where($content, function ($item) {
+			return $item['type'] === 'dir';
+		});
 
-        // remove 'filename' param
-        $dirs = array_map(function ($item) {
-            return Arr::except($item, ['filename']);
-        }, $dirsList);
+		// remove 'filename' param
+		$dirs = array_map(function ($item) {
+			return Arr::except($item, ['filename']);
+		}, $dirsList);
 
-        // if ACL ON
-        if ($this->configRepository->getAcl()) {
-            return array_values($this->aclFilter($disk, $dirs));
-        }
+		// if ACL ON
+		if ($this->configRepository->getAcl()) {
+			return array_values($this->aclFilter($disk, $dirs));
+		}
 
-        return array_values($dirs);
-    }
+		return array_values($dirs);
+	}
 
-    /**
-     * Get only files
-     *
-     * @param $disk
-     * @param $content
-     *
-     * @return array
-     */
-    protected function filterFile($disk, $content)
-    {
+	/**
+	 * Get only files
+	 *
+	 * @param $disk
+	 * @param $content
+	 *
+	 * @return array
+	 */
+	protected function filterFile($disk, $content)
+	{
+		// TODO:: Changed
 		// select only files and add trunced mime type
 		$files = [];
-		foreach($content as $item) {
-			if($item['type'] === 'file') {
-				$item['mime'] = stristr(Storage::disk($disk)->mimeType($item['path']), '/', true);
+		foreach ($content as $item) {
+			if ($item['type'] === 'file') {
+				$item['mime'] = $this->getCustomMimeType($disk, $item['path']);
 				$files[] = $item;
 			}
 		}
 
-        // select only files
-        // $files = Arr::where($content, function ($item) use ($disk) {
-        //     if($item['type'] === 'file') {
+		// select only files
+		// $files = Arr::where($content, function ($item) use ($disk) {
+		//     if($item['type'] === 'file') {
 		// 		$item['properties'] = $this->fileProperties($disk, $item['path']);
 		// 		return $item;
 		// 	}
-        // });
+		// });
 
-        // if ACL ON
-        if ($this->configRepository->getAcl()) {
-            return array_values($this->aclFilter($disk, $files));
-        }
+		// if ACL ON
+		if ($this->configRepository->getAcl()) {
+			return array_values($this->aclFilter($disk, $files));
+		}
 
-        return array_values($files);
-    }
+		return array_values($files);
+	}
 
-    /**
-     * ACL filter
-     *
-     * @param $disk
-     * @param $content
-     *
-     * @return mixed
-     */
-    protected function aclFilter($disk, $content)
-    {
-        $acl = resolve(ACL::class);
+	/**
+	 * Получить mime type для файла и взять строку до /
+	 * TODO::Changed
+	 * @param [type] $disk
+	 * @param [type] $path
+	 * @return void
+	 */
+	public function getCustomMimeType($disk, $path)
+	{
+		return stristr(Storage::disk($disk)->mimeType($path), '/', true);
+	}
 
-        $withAccess = array_map(function ($item) use ($acl, $disk) {
-            // add acl access level
-            $item['acl'] = $acl->getAccessLevel($disk, $item['path']);
+	/**
+	 * ACL filter
+	 *
+	 * @param $disk
+	 * @param $content
+	 *
+	 * @return mixed
+	 */
+	protected function aclFilter($disk, $content)
+	{
+		$acl = resolve(ACL::class);
 
-            return $item;
-        }, $content);
+		$withAccess = array_map(function ($item) use ($acl, $disk) {
+			// add acl access level
+			$item['acl'] = $acl->getAccessLevel($disk, $item['path']);
 
-        // filter files and folders
-        if ($this->configRepository->getAclHideFromFM()) {
-            return array_filter($withAccess, function ($item) {
-                return $item['acl'] !== 0;
-            });
-        }
+			return $item;
+		}, $content);
 
-        return $withAccess;
-    }
+		// filter files and folders
+		if ($this->configRepository->getAclHideFromFM()) {
+			return array_filter($withAccess, function ($item) {
+				return $item['acl'] !== 0;
+			});
+		}
+
+		return $withAccess;
+	}
 }
